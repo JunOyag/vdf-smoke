@@ -1,0 +1,49 @@
+name: vdf-smoke
+on: workflow_dispatch
+
+jobs:
+  windows-msvc:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Machine
+        shell: pwsh
+        run: Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, MaxClockSpeed | Format-List
+
+      # MPIR statique + CRT dynamique (/MD), pour s'aligner sur le CRT de Rust MSVC
+      - name: MPIR via vcpkg
+        shell: pwsh
+        run: |
+          vcpkg install mpir:x64-windows-static-md
+          $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md"
+          echo "RUSTFLAGS=-L native=$root\lib" >> $env:GITHUB_ENV
+          echo "INCLUDE=$env:INCLUDE;$root\include" >> $env:GITHUB_ENV
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+          Get-ChildItem "$root\lib" | Select-Object Name
+
+      - name: Build
+        shell: pwsh
+        run: cargo build --release
+
+      - name: Officiel (valide l'environnement)
+        shell: pwsh
+        run: .\target\release\vdf-smoke.exe official
+        timeout-minutes: 3
+
+      - name: Positif
+        shell: pwsh
+        run: .\target\release\vdf-smoke.exe positive
+        timeout-minutes: 3
+
+      - name: Negatif (ne doit pas boucler)
+        shell: pwsh
+        run: .\target\release\vdf-smoke.exe negative
+        timeout-minutes: 3
+
+      - name: Bench T
+        shell: pwsh
+        run: .\target\release\vdf-smoke.exe bench
+        timeout-minutes: 10
