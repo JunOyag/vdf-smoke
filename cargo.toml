@@ -1,9 +1,0 @@
-[package]
-name = "vdf-smoke"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-chiavdf = "=1.1.14"
-sha2 = "0.10"
-hex = "0.4"
