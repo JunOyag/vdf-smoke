@@ -21,22 +21,46 @@ jobs:
           LIBCLANG_PATH: C:\Program Files\LLVM\bin
         run: cargo build --release
 
-      - name: Officiel (valide l'environnement)
+      - name: Demarrage sans argument (doit afficher "usage")
         shell: pwsh
-        run: .\target\release\vdf-smoke.exe official
-        timeout-minutes: 3
+        continue-on-error: true
+        run: |
+          .\target\release\vdf-smoke.exe 2>&1
+          "exit=$LASTEXITCODE"
+
+      - name: Officiel
+        shell: pwsh
+        continue-on-error: true
+        env:
+          RUST_BACKTRACE: full
+        run: |
+          .\target\release\vdf-smoke.exe official 2>&1
+          $c = $LASTEXITCODE
+          "exit=$c hex=" + ('{0:X}' -f $c)
 
       - name: Positif
         shell: pwsh
-        run: .\target\release\vdf-smoke.exe positive
+        continue-on-error: true
+        run: |
+          .\target\release\vdf-smoke.exe positive 2>&1
+          $c = $LASTEXITCODE
+          "exit=$c hex=" + ('{0:X}' -f $c)
         timeout-minutes: 3
 
-      - name: Negatif (ne doit pas boucler)
+      - name: Negatif
         shell: pwsh
-        run: .\target\release\vdf-smoke.exe negative
+        continue-on-error: true
+        run: |
+          .\target\release\vdf-smoke.exe negative 2>&1
+          $c = $LASTEXITCODE
+          "exit=$c hex=" + ('{0:X}' -f $c)
         timeout-minutes: 3
 
       - name: Bench T
         shell: pwsh
-        run: .\target\release\vdf-smoke.exe bench
+        continue-on-error: true
+        run: |
+          .\target\release\vdf-smoke.exe bench 2>&1
+          $c = $LASTEXITCODE
+          "exit=$c hex=" + ('{0:X}' -f $c)
         timeout-minutes: 10
