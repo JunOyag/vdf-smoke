@@ -21,10 +21,18 @@ jobs:
           LIBCLANG_PATH: C:\Program Files\LLVM\bin
         run: cargo build --release
 
-      - name: Demarrage sans argument (doit afficher "usage")
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: DLL requises par l'executable
         shell: pwsh
-        continue-on-error: true
+        run: dumpbin /dependents .\target\release\vdf-smoke.exe
+
+      - name: DLL de MPIR a cote de l'executable
+        shell: pwsh
         run: |
+          $dir = (Resolve-Path "$env:USERPROFILE\.cargo\registry\src\*\chiavdf-1.1.14\mpir_gc_x64").Path
+          Get-ChildItem $dir | Format-Table Name, Length
+          Get-ChildItem $dir -Filter *.dll | Copy-Item -Destination .\target\release\
           .\target\release\vdf-smoke.exe 2>&1
           "exit=$LASTEXITCODE"
 
