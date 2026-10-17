@@ -13,19 +13,12 @@ jobs:
         shell: pwsh
         run: Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, MaxClockSpeed | Format-List
 
-      # MPIR statique + CRT dynamique (/MD), pour s'aligner sur le CRT de Rust MSVC
-      - name: MPIR via vcpkg
-        shell: pwsh
-        run: |
-          vcpkg install mpir:x64-windows-static-md
-          $root = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md"
-          echo "RUSTFLAGS=-L native=$root\lib" >> $env:GITHUB_ENV
-          echo "INCLUDE=$env:INCLUDE;$root\include" >> $env:GITHUB_ENV
-          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-          Get-ChildItem "$root\lib" | Select-Object Name
-
+      # Pas de vcpkg : la crate embarque mpir_gc_x64/mpir.lib.
+      # Pas de surcharge de INCLUDE : bindgen doit voir les en-tetes MSVC.
       - name: Build
         shell: pwsh
+        env:
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
         run: cargo build --release
 
       - name: Officiel (valide l'environnement)
