@@ -81,27 +81,38 @@ fn negative() {
     assert!(!r, "preuve reutilisable entre identites");
 }
 
-// Débit pour calibrer T (blocage #3)
-fn bench() {
+// Débit pour calibrer T (blocage #3) : N mesures, médiane
+fn bench(runs: usize) {
     let t = 1_000_000u64;
-    let ch = challenge_of(b"bench-pub-key");
-    let t0 = Instant::now();
-    let proof = prove(&ch, &default_el(), BITS, t).expect("prove failed");
-    let dt = t0.elapsed().as_secs_f64();
-    let ips = t as f64 / dt;
-    step!("bench: T={t} prove={dt:.2}s -> {ips:.0} it/s ; T pour 60 s = {:.0}", ips * 60.0);
-    let disc = disc_of(&ch);
-    let t0 = Instant::now();
-    assert!(verify_n_wesolowski(&disc, &default_el(), &proof, t, 0));
-    step!("bench: verify={:?} (Delta recalcule inclus hors mesure)", t0.elapsed());
+    let mut rates: Vec<f64> = Vec::new();
+    for i in 0..runs {
+        let ch = challenge_of(format!("bench-pub-key-{i}").as_bytes());
+        let t0 = Instant::now();
+        let proof = prove(&ch, &default_el(), BITS, t).expect("prove failed");
+        let dt = t0.elapsed().as_secs_f64();
+        let disc = disc_of(&ch);
+        assert!(verify_n_wesolowski(&disc, &default_el(), &proof, t, 0));
+        rates.push(t as f64 / dt);
+        step!("bench run {}/{runs}: {dt:.2}s -> {:.0} it/s", i + 1, t as f64 / dt);
+    }
+    rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let med = rates[rates.len() / 2];
+    step!(
+        "bench RESULT: min={:.0} median={med:.0} max={:.0} it/s ; T(60s, median)={:.0} ; duree de T=5400000 a la mediane={:.1}s",
+        rates[0],
+        rates[rates.len() - 1],
+        med * 60.0,
+        5_400_000.0 / med
+    );
 }
 
 fn main() {
-    match std::env::args().nth(1).as_deref() {
+    let a: Vec<String> = std::env::args().collect();
+    match a.get(1).map(|s| s.as_str()) {
         Some("official") => official(),
         Some("positive") => positive(),
         Some("negative") => negative(),
-        Some("bench") => bench(),
-        _ => eprintln!("usage: vdf-smoke official|positive|negative|bench"),
+        Some("bench") => bench(a.get(2).and_then(|s| s.parse().ok()).unwrap_or(5)),
+        _ => eprintln!("usage: vdf-smoke official|positive|negative|bench [runs]"),
     }
 }

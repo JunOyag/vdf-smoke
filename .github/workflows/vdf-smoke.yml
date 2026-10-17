@@ -1,74 +1,64 @@
-name: vdf-smoke
+name: vdf-bench
 on: workflow_dispatch
 
 jobs:
-  windows-msvc:
-    runs-on: windows-latest
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Machine
+      - name: CPU (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, MaxClockSpeed | Format-List
+      - name: CPU (Linux)
+        if: runner.os == 'Linux'
+        run: lscpu | head -n 20
+      - name: CPU (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          sysctl -n machdep.cpu.brand_string || true
+          sysctl -n hw.ncpu
 
-      # Pas de vcpkg : la crate embarque mpir_gc_x64/mpir.lib.
-      # Pas de surcharge de INCLUDE : bindgen doit voir les en-tetes MSVC.
-      - name: Build
+      - name: Dependances (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake libgmp-dev libclang-dev
+      - name: Dependances (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gmp cmake
+          echo "CPATH=$(brew --prefix gmp)/include" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$(brew --prefix gmp)/lib" >> $GITHUB_ENV
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         env:
           LIBCLANG_PATH: C:\Program Files\LLVM\bin
         run: cargo build --release
+      - name: Build (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: cargo build --release
 
-      - uses: ilammy/msvc-dev-cmd@v1
-
-      - name: DLL requises par l'executable
-        shell: pwsh
-        run: dumpbin /dependents .\target\release\vdf-smoke.exe
-
-      - name: DLL de MPIR a cote de l'executable
+      - name: DLL MPIR a cote de l'executable (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $dir = (Resolve-Path "$env:USERPROFILE\.cargo\registry\src\*\chiavdf-1.1.14\mpir_gc_x64").Path
-          Get-ChildItem $dir | Format-Table Name, Length
           Get-ChildItem $dir -Filter *.dll | Copy-Item -Destination .\target\release\
-          .\target\release\vdf-smoke.exe 2>&1
-          "exit=$LASTEXITCODE"
 
       - name: Officiel
-        shell: pwsh
-        continue-on-error: true
-        env:
-          RUST_BACKTRACE: full
-        run: |
-          .\target\release\vdf-smoke.exe official 2>&1
-          $c = $LASTEXITCODE
-          "exit=$c hex=" + ('{0:X}' -f $c)
-
-      - name: Positif
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          .\target\release\vdf-smoke.exe positive 2>&1
-          $c = $LASTEXITCODE
-          "exit=$c hex=" + ('{0:X}' -f $c)
+        shell: bash
+        run: cargo run --release --quiet -- official
         timeout-minutes: 3
 
-      - name: Negatif
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          .\target\release\vdf-smoke.exe negative 2>&1
-          $c = $LASTEXITCODE
-          "exit=$c hex=" + ('{0:X}' -f $c)
-        timeout-minutes: 3
-
-      - name: Bench T
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          .\target\release\vdf-smoke.exe bench 2>&1
-          $c = $LASTEXITCODE
-          "exit=$c hex=" + ('{0:X}' -f $c)
-        timeout-minutes: 10
+      - name: Bench (5 mesures)
+        shell: bash
+        run: cargo run --release --quiet -- bench 5
+        timeout-minutes: 15
